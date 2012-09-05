@@ -181,7 +181,7 @@
 (define (mpd-command-list o)
   (mpd-command o "commands"))
 
-;(exit)
+										;(exit)
 ;;TODO- remove everything after this. Just for testing purposes
 (define-values (input output)
   (create-mpd-connection (get-host) (get-port)))
