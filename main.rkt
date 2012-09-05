@@ -1,19 +1,38 @@
 #!/usr/bin/racket
 
+;; Racket Scheme MPD Client Library
+;;
+;; Copyright 2012 Vincent Dumas 
+;; Distributed under the GPL3 license
+;; 
+
+
+;; TODOs: 1) put into object
+;;        2) complete command library
+;;        3) pass in a function for output --
+;;           read line and return it from mpd-command
+
+
+
 #lang racket/base
 (require racket/list racket/tcp)
 
-;; get mpd port number
+;;constants
+(define *mpd-error-msg* "ACK ")
+(define *mpd-success-msg* "OK")
+(define *mpd-list-next* "list_OK")
+
+
+;; get a mpd port number
 (define (get-port)
   (define port (getenv "MPD_PORT"))
-  (cond [(not port) 6600]
-	[else (string->number port)]))
+  (if (not port) 6600
+      (string->number port)))
 
-;; get mpd host
+;; get a mpd host
 (define (get-host)
   (define host (getenv "MPD_HOST"))
-  (cond [(not host) "localhost"]
-	[else host]))
+  (if (not host) "localhost" host))
 
 ;; create connection to mpd server
 (define (create-mpd-connection host port)
@@ -21,11 +40,13 @@
 				(log-error (exn-message exn))
 				(values #f #f))])
 		  (let-values ([(i o) (tcp-connect host port)])
-		    ;;make non-blocking
-		    (file-stream-buffer-mode i 'none)
-		    (file-stream-buffer-mode o 'line)
-		    (read-line i)
+		    ;;sleep to allow time for connection
 		    (sleep 1)
+		    ;;make io non-blocking
+		    (file-stream-buffer-mode i 'none)
+		    (file-stream-buffer-mode o 'none)
+		    ;;remove connection notice from buffer
+		    (read-line i)
 		    (values i o))))
 
 ;;close connection
@@ -36,21 +57,23 @@
 ;; send command to mpd
 (define (mpd-command o cmd . args)
   (if (output-port? o)
-      (begin
-	(display cmd o)
+      (let ([out cmd])
 	(for-each (lambda (arg)
-		    (display #\space o)
-		    (display arg o)) args)
-	(newline o)
+		    (set! out (string-append out " " arg))) args)
+	(displayln out o)
 	(flush-output o))
       (begin
-	(log-error "No output port.")
-	#f)))
+	(log-error "No output port.") #f)))
+
+(define (mpd-response-error str)
+  (if (< (string-length str) 4) #f
+      (equal? (substring str 0 4) *mpd-error-msg*)))
 
 (define (mpd-response i)
   (let ([str (read-line i)])
-    (if (equal? "OK" str) empty
-	(append (list str) (mpd-response i)))))
+    (if (mpd-response-error str) (list str)
+	(if (equal? *mpd-success-msg* str) empty
+	    (append (list str) (mpd-response i))))))
 
 (define (mpd-parse-response strlist)
   (map (lambda (str)
@@ -67,11 +90,13 @@
 
 ;;play id
 (define (mpd-play-id o id)
-  (mpd-command o "playid" id))
+  (mpd-command o "playid"
+	       (if (number? id) (number->string id) id)))
 
 ;;play song at position
 (define (mpd-play-pos o pos)
-  (mpd-command o "play" pos))
+  (mpd-command o "play"
+	       (if (number? pos) (number->string pos) pos)))
 
 ;;stop
 (define (mpd-stop o)
@@ -91,11 +116,13 @@
 
 ;;repeat
 (define (mpd-repeat o mode)
-  (mpd-command o "repeat" mode))
+  (mpd-command o "repeat"
+	       (if (number? mode) (number->string mode) mode)))
 
 ;;random
 (define (mpd-random o mode)
-  (mpd-command o "random" mode))
+  (mpd-command o "random"
+	       (if (number? mode) (number->string mode) mode)))
 
 ;;shuffle
 (define (mpd-shuffle o)
@@ -103,7 +130,8 @@
 
 ;;crossfade
 (define (mpd-crossfade o secs)
-  (mpd-command o "crossfade" secs))
+  (mpd-command o "crossfade"
+	       (if (number? secs) (number->string secs) secs)))
 
 ;;add
 (define (mpd-add o path)
@@ -111,15 +139,18 @@
 
 ;;addid
 (define (mpd-add-id o id)
-  (mpd-command o "addid" id))
+  (mpd-command o "addid"
+	       (if (number? id) (number->string id) id)))
 
 ;;delete song at position in playlist
 (define (mpd-delete-song o pos)
-  (mpd-command o "delete" pos))
+  (mpd-command o "delete"
+	       (if (number? pos) (number->string pos) pos)))
 
 ;;delete song with id from playlist
 (define (mpd-delete-songid o id)
-  (mpd-command o "deleteid" id))
+  (mpd-command o "deleteid"
+	       (if (number? id) (number->string id) id)))
 
 ;;current song
 (define (mpd-current-song o)
@@ -143,27 +174,58 @@
 
 ;;set volume (0-100)
 (define (mpd-set-volume o vol)
-  (mpd-command o "setvol" vol))
+  (mpd-command o "setvol"
+	       (if (number? vol) (number->string vol) vol)))
 
 ;;increment/decrement volume -- deprecated?
 ;; (define (mpd-volume o num)
 ;;   (mpd-command o "volume" num))
 
-;;seek
+;;seek -- time format?
 (define (mpd-seek o pos time)
   (mpd-command o "seek" pos time))
 
-;;seek id
+;;seek id -- time format?
 (define (mpd-seek-id o id time)
   (mpd-command o "seekid" id time))
 
-;;update
-(define (mpd-update o)
-  (mpd-command o "update"))
+;;playlist information (optionally with song position)
+(define (mpd-playlist-info o . pos)
+  (mpd-command o "playlistinfo" (cond [(not (empty? pos)) (first pos)]
+				      [else ""])))
+
+;;playlist information with song id
+(define (mpd-playlist-id-info o id)
+  (mpd-command o "playlistid" o
+	       (if (number? id) (number->string id) id)))
+
+;;list artists, album, etc.
+(define (mpd-list o type . args)
+  (mpd-command o "list" type (cond [(not (empty? args)) (first args)]
+				   [else ""])))
+
+;;list all songs in directory (dir) recursively
+(define (mpd-list-all o . dir)
+  (mpd-command o "listall" (cond [(not (empty? dir)) (first dir)]
+				 [else ""])))
+
+;;list all song & info in direcotry (dir) recursively
+(define (mpd-list-all-info o . dir)
+  (mpd-command o "listallinfo" (cond [(not (empty? dir)) (first dir)]
+				     [else ""])))
+
+;;ls (unix cmd util style) dir from db
+(define (mpd-ls-info o . dir)
+  (mpd-command o "lsinfo" (cond [(not (empty? dir)) (first dir)]
+				[else ""])))
 
 ;;clear
 (define (mpd-clear o)
   (mpd-command o "clear"))
+
+;;update
+(define (mpd-update o)
+  (mpd-command o "update"))
 
 ;;clear error
 (define (mpd-clear-error o)
@@ -181,13 +243,17 @@
 (define (mpd-command-list o)
   (mpd-command o "commands"))
 
-					;(exit)
+
 ;;TODO- remove everything after this. Just for testing purposes
+
+;; (exit)
+
 (define-values (input output)
   (create-mpd-connection (get-host) (get-port)))
 
-(mpd-command-list output)
-(mpd-parse-response (mpd-response input))
+(mpd-list output "track")
+;; (displayln (mpd-parse-response (mpd-response input)))
+(mpd-response input)
 
 
 (close-connection input output)
