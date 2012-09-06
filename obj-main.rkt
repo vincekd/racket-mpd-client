@@ -59,15 +59,13 @@
 			   (let-values ([(i o) (tcp-connect host port)])
 			     ;;sleep to allow time for connection
 			     (sleep 1)
-			     ;;make io non-blocking
-			     (file-stream-buffer-mode i 'none)
-			     (file-stream-buffer-mode o 'none)
 			     (set! *input* i)
 			     (set! *output* o)
+			     ;;make io non-blocking
 			     (file-stream-buffer-mode *input* 'none)
 			     (file-stream-buffer-mode *output* 'none)
 			     ;;remove connection notice from buffer
-			     (read-line i) #t)))
+			     (response-error (read-line i)))))
 
 	 ;;close connection
 	 (define/public (close-connection)
