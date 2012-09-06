@@ -66,8 +66,9 @@
 	(log-error "No output port.") #f)))
 
 (define (mpd-response-error str)
-  (if (< (string-length str) 4) #f
-      (equal? (substring str 0 4) *mpd-error-msg*)))
+  (if (< (string-length str) (string-length *mpd-error-msg*)) #f
+      (equal? (substring str 0 (string-length *mpd-error-msg*))
+	      *mpd-error-msg*)))
 
 (define (mpd-response i)
   (let ([str (read-line i)])
@@ -251,7 +252,8 @@
 (define-values (input output)
   (create-mpd-connection (get-host) (get-port)))
 
-(mpd-list output "track")
+;;(mpd-list output "track")
+(mpd-set-volume output "43")
 ;; (displayln (mpd-parse-response (mpd-response input)))
 (mpd-response input)
 
