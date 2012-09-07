@@ -16,6 +16,7 @@
 
 #lang racket/base
 (require racket/list racket/class racket/tcp)
+(provide mpd-client%)
 
 ;;object overwrites list?
 (define racket-list list)
@@ -61,7 +62,6 @@
 			     (sleep 1)
 			     (set! *input* i)
 			     (set! *output* o)
-			     ;;make io non-blocking
 			     (file-stream-buffer-mode *input* 'none)
 			     (file-stream-buffer-mode *output* 'none)
 			     ;;remove connection notice from buffer
@@ -75,9 +75,14 @@
 	 ;;;IO
 	 (define (check-error)
 	   ;;check if error occured
-	   (let ([msg (peek-string *error-length* 0 *input*)])
-	     (cond [(and msg (equal? msg *mpd-error-msg*)) #t]
-		   [else #f])))
+	   (define msg (string->bytes/utf-8 *mpd-error-msg*))
+	   (peek-bytes-avail! msg 0 (port-progress-evt *input*)
+			      *input* 0 (bytes-length msg))
+	   (set! msg (bytes->string/utf-8 msg))
+	   (cond [(and msg (equal? msg *error-length*)) #t]
+		 [else #f]))
+	     ;; (cond [(and msg (equal? msg *mpd-error-msg*)) #t]
+	     ;; 	   [else #f])))
 
 	 (define (handle-error)
 	   ;;TODO: finish this
@@ -310,11 +315,11 @@
 ;;TODO- remove everything after this. Just for testing purposes
 
 
-(define mpd (new mpd-client%))
-(cond [(send mpd create-connection)
-       (begin
-	 (displayln (send mpd set-volume 50))
-	 (displayln (send mpd parse-response (send mpd playlist-info))))])
+;; (define mpd (new mpd-client%))
+;; (cond [(send mpd create-connection)
+;;        (begin
+;; 	 (displayln (send mpd set-volume 50))
+;; 	 (displayln (send mpd parse-response (send mpd playlist-info))))])
 ;;(displayln (send mpd fetch-response))
 ;;(exit)
 
