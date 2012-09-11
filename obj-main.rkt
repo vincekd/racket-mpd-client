@@ -87,6 +87,7 @@
 	   ;;TODO: finish this
 	   ;;pull error msg from input port, parse, return (throw error?)
 	   (let ([str (read-line *input*)])
+	     (displayln str)
 	     (substring str *error-length*)))
 
 	 ;; send command to mpd
@@ -217,11 +218,13 @@
 
 	 ;;add
 	 (define/public (add path)
-	   (if (command (get-cmd-string "add" path)) #t (handle-error)))
+	   (if (command (get-cmd-string "add" path))
+	       (fetch-response) (handle-error)))
 
 	 ;;addid
 	 (define/public (add-id id)
-	   (if (command (get-cmd-string "addid" id)) #t (handle-error)))
+	   (if (command (get-cmd-string "addid" id))
+	       (fetch-response) (handle-error)))
 
 	 ;;delete song at position in playlist
 	 (define/public (delete-song pos)

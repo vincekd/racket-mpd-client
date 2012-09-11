@@ -6,6 +6,8 @@
 
 (define mpd (new mpd-client%))
 (define conn (send mpd create-connection))
+
+;;(send mpd mpd-list "title" "album" "EP")
 ;;(displayln (send mpd mpd-list "title" "album" "Interstate 8" "artist" "Modest Mouse" ))
 ;;(displayln (send mpd playlist-info))
 ;;(displayln (send mpd pl-changes 0))
