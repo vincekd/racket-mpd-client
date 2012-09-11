@@ -17,9 +17,6 @@
 (require racket/list racket/class racket/tcp)
 (provide mpd-client%)
 
-;;object overwrites list?
-(define racket-list list)
-
 (define mpd-client%
   (class object%
 	 (super-new)
@@ -109,9 +106,9 @@
 	 ;;-- returns list of output split by newline
 	 (define/public (fetch-response)
 	   (let ([str (read-line *input*)])
-	     (cond [(response-error str) (racket-list str)]
+	     (cond [(response-error str) (list str)]
 		   [(equal? *mpd-success-msg* str) empty]
-		   [else (append (racket-list str) (fetch-response))])))
+		   [else (append (list str) (fetch-response))])))
 
 	 ;;Utilities
 	 ;;returns a list of strings, sorted alphabetically
@@ -174,11 +171,12 @@
 
 	 ;;play
 	 (define/public (play)
-	   (if (command "play") #t (handle-error)))
+	   (if (command "play") (fetch-response) (handle-error)))
 
 	 ;;play id
 	 (define/public (play-id id)
-	   (if (command (get-cmd-string "playid" id)) #t (handle-error)))
+	   (if (command (get-cmd-string "playid" id))
+	       (fetch-response) (handle-error)))
 
 	 ;;play song at position
 	 (define/public (play-pos pos)
