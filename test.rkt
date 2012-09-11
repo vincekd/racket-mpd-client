@@ -2,12 +2,18 @@
 
 #lang racket
 
-;;(require racket/tcp)
-(define listener (tcp-listen 9999 1 #f "localhost"))
+(require "../mpdclient/obj-main.rkt")
 
-(let-values ([(i o) (tcp-accept listener)])
-  (read-line i))
+(define mpd (new mpd-client%))
+(define conn (send mpd create-connection))
+;;(displayln (send mpd mpd-list "title" "album" "Interstate 8" "artist" "Modest Mouse" ))
+;;(displayln (send mpd playlist-info))
+;;(displayln (send mpd pl-changes 0))
+
+;; (displayln (send mpd command "search \"album\" \"EP\" \"artist\" \"American\""))
+;; (displayln (send mpd fetch-response))
 
 
+;;(send mpd parse-group "file" (send mpd list-all-info))
 
 

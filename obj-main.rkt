@@ -3,15 +3,14 @@
 ;; Racket Scheme MPD Client Library
 ;;
 ;; Copyright 2012 Vincent Dumas 
-;; Distributed under the GPL3 license
+;; Distributed under the GPLv3 license
 ;; 
 
 
-;; TODOs: -1) put into object
-;;        2) complete command library
-;;        3) pass in a function for output --
-;;           read line and return it from mpd-command
-;;	  4) use (byte-ready? input) to fetch data
+;; TODOs: -
+;;        1) complete command library
+;;        http://mpd.wikia.com/wiki/MusicPlayerDaemonCommands
+;;
 
 
 #lang racket/base
@@ -91,12 +90,11 @@
 	     (substring str *error-length*)))
 
 	 ;; send command to mpd
-	 (define/public (command cmd . args)
+	 (define/public (command cmd)
 	   (if (output-port? *output*)
-	       (let ([out cmd])
-		 (for-each (lambda (arg)
-			     (set! out (string-append out " " arg))) args)
-		 (displayln out *output*)
+	       (begin 
+		 ;;(displayln cmd)
+		 (displayln cmd *output*)
 		 (flush-output *output*)
 		 (not (check-error)))
 	       (begin
@@ -115,15 +113,59 @@
 		   [else (append (racket-list str) (fetch-response))])))
 
 	 ;;Utilities
-	 
+	 ;;returns a list of strings, sorted alphabetically
+	 (define/public (parse-response-list strlist)
+	   (sort (filter (lambda (str)
+		     (not (equal? str "")))
+		     (map (lambda (str)
+			  (second (regexp-split #rx": " str))) strlist))
+		 string<?))
+
+	 ;;parse groups of data
+	 (define/public (parse-group delimiter inl)
+	   (define newlist empty)
+	   (define currhash empty)
+	   (for-each (lambda (e)
+		       (let ([splits (regexp-split #rx": " e)])
+			 (when (equal? delimiter (first splits))
+			       (begin
+				 (when (not (list? currhash))
+				       (set! newlist (append newlist
+							     (list currhash))))
+				 (set! currhash (make-hash))))
+			 (hash-set! currhash (first splits) (second splits))))
+		     inl) (append newlist (list currhash)))
+
+	 ;;takes list of hashes as generated above and gets a track listing
+	 ;; (define/public (get-track-list hl)
+	 ;;   (map (lambda (h)
+	 ;; 	  (string-append (hash-ref h "Track") " "
+	 ;; 			 (hash-ref h "Title"))) hl))
+
 
 	 ;;-- takes in list of strings (like that produced by fetch-response)
-	 ;;   and parses into pairs: ('file' . '/path/to/file'), etc.
+	 ;;   and parses into hash: ('file' . '/path/to/file'), etc.
 	 (define/public (parse-response strlist)
-	   (map (lambda (str)
-		  (let ([halfs (regexp-split #rx": " str)])
-		    (cons (first halfs) (second halfs)))) strlist))
+	   (make-hash (map (lambda (str)
+			     (define splits (regexp-split #rx": " str))
+			     (cons (first splits) (second splits))) strlist)))
 
+	 (define (sanitize any)
+	   (cond [(number? any) (number->string any)]
+		 [else any]))
+
+	 ;;returns a string of the arguments or #f
+	 (define (get-cmd-string cmd args)
+	   (cond [(not (list? args)) (string-append cmd " \""
+						    (sanitize args) "\"")]
+		 [(empty? args) cmd]
+		 [else 
+		  (let ([out cmd])
+		    (for-each
+		     (lambda (arg)
+		       (set! out (string-append out " \""
+						(sanitize arg) "\""))) args)
+		    out)]))
 	 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; COMMANDS - Start defining commands ;;
@@ -135,15 +177,11 @@
 
 	 ;;play id
 	 (define/public (play-id id)
-	   (if (command "playid"
-			(if (number? id) (number->string id) id))
-	       #t (handle-error)))
+	   (if (command (get-cmd-string "playid" id)) #t (handle-error)))
 
 	 ;;play song at position
 	 (define/public (play-pos pos)
-	   (if (command "play"
-			(if (number? pos) (number->string pos) pos))
-	        #t (handle-error)))
+	   (if (command (get-cmd-string "play" pos)) #t (handle-error)))
 	 
 	 ;;stop
 	 (define/public (stop)
@@ -163,15 +201,11 @@
 
 	 ;;repeat
 	 (define/public (repeat mode)
-	   (if (command "repeat"
-			(if (number? mode) (number->string mode) mode))
-	       #t (handle-error)))
+	   (if (command (get-cmd-string "repeat" mode)) #t (handle-error)))
 
 	 ;;random
 	 (define/public (random mode)
-	   (if (command "random"
-			(if (number? mode) (number->string mode) mode))
-	       #t (handle-error)))
+	   (if (command (get-cmd-string "random" mode)) #t (handle-error)))
 
 	 ;;shuffle
 	 (define/public (shuffle)
@@ -179,30 +213,23 @@
 
 	 ;;crossfade
 	 (define/public (crossfade secs)
-	   (command "crossfade"
-		    (if (number? secs) (number->string secs) secs)))
+	   (if (command (get-cmd-string "crossfade" secs)) #t (handle-error)))
 
 	 ;;add
 	 (define/public (add path)
-	   (if (command "add" path) #t (handle-error)))
+	   (if (command (get-cmd-string "add" path)) #t (handle-error)))
 
 	 ;;addid
 	 (define/public (add-id id)
-	   (if (command "addid"
-			(if (number? id) (number->string id) id))
-	       #t (handle-error)))
+	   (if (command (get-cmd-string "addid" id)) #t (handle-error)))
 
 	 ;;delete song at position in playlist
 	 (define/public (delete-song pos)
-	   (if (command "delete"
-			(if (number? pos) (number->string pos) pos))
-	       #t (handle-error)))
+	   (if (command (get-cmd-string "delete" pos)) #t (handle-error)))
 
 	 ;;delete song with id from playlist
 	 (define/public (delete-songid id)
-	   (if (command "deleteid"
-			(if (number? id) (number->string id) id))
-	       #t (handle-error)))
+	   (if (command (get-cmd-string "deleteid" id)) #t (handle-error)))
 
 	 ;;current song
 	 ;; returns list of strings
@@ -221,19 +248,19 @@
 
 	 ;;find
 	 ;; returns list of strings
-	 (define/public (find type str)
-	   (if (command "find" type str) (fetch-response) (handle-error)))
+	 (define/public (find type str . args)
+	   (if (command (get-cmd-string "find" (append (list type str) args)))
+	       (fetch-response) (handle-error)))
 
 	 ;;searches type:title/artist/album/filename for str
 	 ;; returns list of strings
-	 (define/public (search type str)
-	   (if (command "search" type str) (fetch-response) (handle-error)))
+	 (define/public (search type str . args)
+	   (if (command (get-cmd-string "search" (append (list type str) args)))
+	       (fetch-response) (handle-error)))
 
 	 ;;set volume (0-100)
 	 (define/public (set-volume vol)
-	   (if (command "setvol"
-			(if (number? vol) (number->string vol) vol))
-	       #t (handle-error)))
+	   (if (command (get-cmd-string "setvol" vol)) #t (handle-error)))
 
 	 ;;increment/decrement volume -- deprecated?
 	 ;; (define/public (volume num)
@@ -241,47 +268,54 @@
 
 	 ;;seek -- time format?
 	 (define/public (seek pos time)
-	   (if (command "seek" pos time) #t (handle-error)))
+	   (if (command (get-cmd-string "seek" (list pos time)))
+	       #t (handle-error)))
 
 	 ;;seek id -- time format?
 	 (define/public (seek-id id time)
-	   (if (command "seekid" id time) #t (handle-error)))
+	   (if (command (get-cmd-string "seekid" (list id time)))
+	       #t (handle-error)))
 
 	 ;;playlist information (optionally with song position)
 	 ;; returns list of strings
 	 (define/public (playlist-info . pos)
-	   (if (command "playlistinfo" (if (not (empty? pos)) (first pos) ""))
+	   (if (command (get-cmd-string "playlistinfo" pos))
 	       (fetch-response) (handle-error)))
 
 	 ;;playlist information with song id
 	 ;; returns list of strings
 	 (define/public (playlist-id-info id)
-	   (if (command "playlistid"
-			(if (number? id) (number->string id) id))
+	   (if (command (get-cmd-string "playlistid" id))
 	       (fetch-response) (handle-error)))
 
 	 ;;list artists, album, etc.
 	 ;; returns list of strings
-	 (define/public (list type . args)
-	   (if (command "list" type (if (not (empty? args)) (first args) ""))
+	 (define/public (mpd-list type . args)
+	   (if (command (get-cmd-string "list" (append (list type) args)))
 	       (fetch-response) (handle-error)))
 
 	 ;;list all songs in directory (dir) recursively
 	 ;; returns list of strings
 	 (define/public (list-all . dir)
-	   (if (command "listall" (if (not (empty? dir)) (first dir) ""))
+	   (if (command (get-cmd-string "listall" dir))
 	       (fetch-response) (handle-error)))
 
 	 ;;list all song & info in direcotry (dir) recursively
 	 ;; returns list of strings
 	 (define/public (list-all-info . dir)
-	   (if (command "listallinfo" (if (not (empty? dir)) (first dir) ""))
+	   (if (command (get-cmd-string "listallinfo" dir))
 	       (fetch-response) (handle-error)))
 
 	 ;;ls (unix cmd util style) dir from db
 	 ;; returns list of strings
 	 (define/public (ls-info . dir)
-	   (if (command "lsinfo" (if (not (empty? dir)) (first dir) ""))
+	   (if (command (get-cmd-string "lsinfo" dir))
+	       (fetch-response) (handle-error)))
+
+	 ;;gets playlist changes since version (plv)
+	 ;; returns list of strings
+	 (define/public (pl-changes . plv)
+	   (if (command (get-cmd-string "plchanges" plv))
 	       (fetch-response) (handle-error)))
 
 	 ;;list commands
@@ -297,6 +331,9 @@
 	 (define/public (update)
 	   (if (command "update") #t (handle-error)))
 
+	 (define/public (ping)
+	   (if (command "ping") (fetch-response) (handle-error)))
+
 	 ;;clear error
 	 (define/public (clear-error)
 	   (if (command "clearerror") #t (handle-error)))
@@ -311,27 +348,5 @@
 	 
 	 ));;end mpd-client%
 
-
-;;TODO- remove everything after this. Just for testing purposes
-
-
-;; (define mpd (new mpd-client%))
-;; (cond [(send mpd create-connection)
-;;        (begin
-;; 	 (displayln (send mpd set-volume 50))
-;; 	 (displayln (send mpd parse-response (send mpd playlist-info))))])
-;;(displayln (send mpd fetch-response))
-;;(exit)
-
-;; (define-values (input output)
-;;   (create-mpd-connection (get-host) (get-port)))
-
-;; ;;(mpd-list output "track")
-;; (mpd-set-volume output "43")
-;; ;; (displayln (mpd-parse-response (mpd-response input)))
-;; (mpd-response input)
-
-
-;; (close-connection input output)
 
 
